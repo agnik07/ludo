@@ -253,13 +253,33 @@ export function App() {
     setScreen('playing');
   };
 
-  // Roll Dice Action
+  // Roll Dice Action with Instant Broadcast
   const handleRollDice = () => {
     if (!gameState || !gameState.canRoll || gameState.isRolling || gameState.isAnimatingMove) return;
 
+    // IF ONLINE CLIENT: Send ROLL_DICE to Host over P2P connection!
+    if (gameState.mode === 'online' && !gameState.isHost) {
+      peerNetwork.broadcast({
+        type: 'ROLL_DICE',
+        senderPeerId: peerNetwork.peerId,
+      });
+      return;
+    }
+
     audioSystem.playDiceRoll();
 
-    setGameState((prev) => (prev ? { ...prev, isRolling: true, statusBanner: null } : null));
+    setGameState((prev) => {
+      if (!prev) return null;
+      const rollingState: GameState = { ...prev, isRolling: true, statusBanner: null };
+      if (rollingState.mode === 'online' && rollingState.isHost) {
+        peerNetwork.broadcast({
+          type: 'STATE_SYNC',
+          senderPeerId: peerNetwork.peerId,
+          gameState: rollingState,
+        });
+      }
+      return rollingState;
+    });
 
     setTimeout(() => {
       setGameState((prev) => {
@@ -292,6 +312,15 @@ export function App() {
           nextState.diceValue = null;
           nextState.canRoll = true;
           nextState.currentTurnIndex = getNextTurnIndex(nextState);
+
+          if (nextState.mode === 'online' && nextState.isHost) {
+            peerNetwork.broadcast({
+              type: 'STATE_SYNC',
+              senderPeerId: peerNetwork.peerId,
+              gameState: nextState,
+            });
+          }
+
           return nextState;
         }
 
@@ -344,7 +373,7 @@ export function App() {
     }, 600);
   };
 
-  // Step-by-Step Animated Token Movement ("Walkable" Hops)
+  // Step-by-Step Animated Token Movement with Real-Time Frame Streaming
   const handleSelectToken = (color: PlayerColor, tokenId: number) => {
     if (!gameState || gameState.diceValue === null || gameState.isAnimatingMove) return;
 
@@ -363,7 +392,6 @@ export function App() {
     const token = player.tokens.find((t) => t.id === tokenId);
     if (!token) return;
 
-    // Lock board state while animating steps
     setGameState((prev) => (prev ? { ...prev, isAnimatingMove: true } : null));
 
     const totalSteps = token.step === -1 ? 1 : diceValue;
@@ -384,13 +412,22 @@ export function App() {
             tempToken.step += 1;
           }
         }
+
+        // Stream step frame to online client in real time
+        if (tempState.mode === 'online' && tempState.isHost) {
+          peerNetwork.broadcast({
+            type: 'STATE_SYNC',
+            senderPeerId: peerNetwork.peerId,
+            gameState: tempState,
+          });
+        }
+
         return tempState;
       });
 
       if (stepCount >= totalSteps) {
         clearInterval(animateInterval);
 
-        // Final step completed: execute move rules
         setTimeout(() => {
           setGameState((latestState) => {
             if (!latestState) return null;
@@ -467,7 +504,6 @@ export function App() {
       };
     });
 
-    // Clear speech bubble after 3.5 seconds
     setTimeout(() => {
       setGameState((prev) => {
         if (!prev) return null;
