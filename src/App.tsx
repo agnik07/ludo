@@ -373,7 +373,7 @@ export function App() {
     }, 600);
   };
 
-  // Step-by-Step Animated Token Movement with Real-Time Frame Streaming
+  // Step-by-Step Animated Token Movement with Exact Step Calculations
   const handleSelectToken = (color: PlayerColor, tokenId: number) => {
     if (!gameState || gameState.diceValue === null || gameState.isAnimatingMove) return;
 
@@ -392,25 +392,30 @@ export function App() {
     const token = player.tokens.find((t) => t.id === tokenId);
     if (!token) return;
 
+    // Calculate Authoritative Final Game State FIRST (Single Source of Truth)
+    const { newState: finalState, capturedColor } = executeMoveToken(gameState, color, tokenId, diceValue);
+    finalState.isAnimatingMove = false;
+    finalState.statusBanner = null;
+
+    const initialStep = token.step;
+    const totalSteps = initialStep === -1 ? 1 : diceValue;
+
     setGameState((prev) => (prev ? { ...prev, isAnimatingMove: true } : null));
 
-    const totalSteps = token.step === -1 ? 1 : diceValue;
     let stepCount = 0;
 
     const animateInterval = setInterval(() => {
       stepCount++;
       audioSystem.playStepTick(stepCount);
 
+      const displayStep = initialStep === -1 ? 0 : initialStep + stepCount;
+
       setGameState((prev) => {
         if (!prev) return null;
         const tempState: GameState = JSON.parse(JSON.stringify(prev));
         const tempToken = tempState.players[color].tokens.find((t) => t.id === tokenId);
         if (tempToken) {
-          if (tempToken.step === -1) {
-            tempToken.step = 0;
-          } else {
-            tempToken.step += 1;
-          }
+          tempToken.step = displayStep;
         }
 
         // Stream step frame to online client in real time
@@ -428,36 +433,30 @@ export function App() {
       if (stepCount >= totalSteps) {
         clearInterval(animateInterval);
 
+        // Apply authoritative finalState (no double movement)
         setTimeout(() => {
-          setGameState((latestState) => {
-            if (!latestState) return null;
-            const { newState, capturedColor } = executeMoveToken(latestState, color, tokenId, diceValue);
-            newState.isAnimatingMove = false;
-            newState.statusBanner = null;
+          if (capturedColor) {
+            audioSystem.playCapture();
+          } else if (initialStep + diceValue === 57) {
+            audioSystem.playHomeEntry();
+          } else if (initialStep + diceValue >= 52) {
+            audioSystem.playSafeSpot();
+          }
 
-            if (capturedColor) {
-              audioSystem.playCapture();
-            } else if (token.step + diceValue === 57) {
-              audioSystem.playHomeEntry();
-            } else if (token.step + diceValue >= 52) {
-              audioSystem.playSafeSpot();
-            }
+          if (finalState.gameStatus === 'finished') {
+            audioSystem.playVictory();
+          }
 
-            if (newState.gameStatus === 'finished') {
-              audioSystem.playVictory();
-            }
+          if (finalState.mode === 'online' && finalState.isHost) {
+            peerNetwork.broadcast({
+              type: 'STATE_SYNC',
+              senderPeerId: peerNetwork.peerId,
+              gameState: finalState,
+            });
+          }
 
-            if (newState.mode === 'online' && newState.isHost) {
-              peerNetwork.broadcast({
-                type: 'STATE_SYNC',
-                senderPeerId: peerNetwork.peerId,
-                gameState: newState,
-              });
-            }
-
-            return newState;
-          });
-        }, 120);
+          setGameState(finalState);
+        }, 100);
       }
     }, 130);
   };
