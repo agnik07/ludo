@@ -6,6 +6,7 @@ import {
   Token,
   GameLog,
   GameMode,
+  AvatarId,
 } from '../types/ludo';
 import {
   COLOR_START_OFFSET,
@@ -15,17 +16,31 @@ import {
 
 export const ALL_COLORS: PlayerColor[] = ['red', 'green', 'yellow', 'blue'];
 
+export function getOppositeColor(color: PlayerColor): PlayerColor {
+  switch (color) {
+    case 'red':
+      return 'yellow'; // Red (Top-Left) -> Yellow (Bottom-Right)
+    case 'yellow':
+      return 'red';
+    case 'green':
+      return 'blue'; // Green (Top-Right) -> Blue (Bottom-Left)
+    case 'blue':
+      return 'green';
+  }
+}
+
 export function createInitialGameState(
   mode: GameMode = 'local',
-  playerConfigs: Partial<Record<PlayerColor, { name: string; type: PlayerType; isActive: boolean }>> = {},
+  playerConfigs: Partial<Record<PlayerColor, { name: string; avatar?: AvatarId; type: PlayerType; isActive: boolean }>> = {},
   roomCode?: string,
-  isHost?: boolean
+  isHost?: boolean,
+  maxOnlinePlayers: number = 4
 ): GameState {
-  const defaultConfigs: Record<PlayerColor, { name: string; type: PlayerType; isActive: boolean }> = {
-    red: { name: 'Red Player', type: 'human', isActive: true },
-    green: { name: 'Green Player', type: 'bot', isActive: true },
-    yellow: { name: 'Yellow Player', type: 'bot', isActive: true },
-    blue: { name: 'Blue Player', type: 'bot', isActive: true },
+  const defaultConfigs: Record<PlayerColor, { name: string; avatar?: AvatarId; type: PlayerType; isActive: boolean }> = {
+    red: { name: 'Red Player', avatar: 'king', type: 'human', isActive: true },
+    green: { name: 'Green Player', avatar: 'robot', type: 'bot', isActive: true },
+    yellow: { name: 'Yellow Player', avatar: 'wizard', type: 'bot', isActive: true },
+    blue: { name: 'Blue Player', avatar: 'ninja', type: 'bot', isActive: true },
   };
 
   const finalConfigs = { ...defaultConfigs, ...playerConfigs };
@@ -45,6 +60,7 @@ export function createInitialGameState(
     players[color] = {
       color,
       name: config.name,
+      avatar: config.avatar || 'king',
       type: config.type,
       isActive: config.isActive,
       tokens,
@@ -60,8 +76,8 @@ export function createInitialGameState(
   return {
     screen: 'playing',
     mode,
+    maxOnlinePlayers,
     roomCode,
-
     isHost,
     players,
     turnOrder,

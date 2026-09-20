@@ -50,6 +50,7 @@ export interface StatusBanner {
 export interface GameState {
   screen: 'login' | 'setup' | 'playing' | 'finished';
   mode: GameMode;
+  maxOnlinePlayers?: number; // 2, 3, or 4
   roomCode?: string;
   isHost?: boolean;
   players: Record<PlayerColor, Player>;

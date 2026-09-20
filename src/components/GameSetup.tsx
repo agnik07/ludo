@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { GameMode, PlayerColor, PlayerType, UserProfile, AvatarId } from '../types/ludo';
-import { generateRoomCode } from '../utils/multiplayer';
+import { generateRoomCode, copyToClipboard } from '../utils/multiplayer';
 import { AVATARS } from './LoginScreen';
 import { Users, Globe, Play, Copy, Check, Bot, User, Sparkles, ArrowLeft } from 'lucide-react';
 
@@ -14,7 +14,8 @@ interface GameSetupProps {
     roomCode: string,
     hostColor: PlayerColor,
     hostName: string,
-    hostAvatar: AvatarId
+    hostAvatar: AvatarId,
+    maxPlayers: number
   ) => void;
   onJoinOnlineRoom: (roomCode: string, playerName: string, playerAvatar: AvatarId) => void;
   isConnecting: boolean;
@@ -43,13 +44,17 @@ export const GameSetup: React.FC<GameSetupProps> = ({
     blue: { name: 'Blue Bot', avatar: 'ninja', type: 'bot', isActive: true },
   });
 
-  // Online Room setup
+  // Online Host Room setup
+  const [hostMaxPlayers, setHostMaxPlayers] = useState<number>(2); // Default to 2 players (Diagonal Opposite)
   const [hostName, setHostName] = useState(userProfile.name);
-  const [hostColor, setHostColor] = useState<PlayerColor>(userProfile.preferredColor);
+  const [hostColor, setHostColor] = useState<PlayerColor>(userProfile.preferredColor || 'red');
   const [createdCode, setCreatedCode] = useState(() => generateRoomCode());
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  // Online Join Room setup
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [joinNameInput, setJoinNameInput] = useState(userProfile.name);
-  const [copiedLink, setCopiedLink] = useState(false);
 
   // Check URL query param for auto-fill room code
   React.useEffect(() => {
@@ -86,14 +91,38 @@ export const GameSetup: React.FC<GameSetupProps> = ({
     setLocalPlayers(updated);
   };
 
-  const copyShareableLink = () => {
+  const handleCopyCode = async () => {
+    const ok = await copyToClipboard(createdCode);
+    if (ok) {
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+    }
+  };
+
+  const handleCopyLink = async () => {
     const link = `${window.location.origin}${window.location.pathname}?room=${createdCode}`;
-    navigator.clipboard.writeText(link);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
+    const ok = await copyToClipboard(link);
+    if (ok) {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    }
   };
 
   const userAvatarIcon = AVATARS.find((a) => a.id === userProfile.avatar)?.icon || '👑';
+
+  // Calculate opposite color helper for 2-player host display
+  const getOppositeColor = (color: PlayerColor): PlayerColor => {
+    switch (color) {
+      case 'red':
+        return 'yellow'; // Red Top-Left -> Yellow Bottom-Right (Opposite)
+      case 'yellow':
+        return 'red';
+      case 'green':
+        return 'blue'; // Green Top-Right -> Blue Bottom-Left (Opposite)
+      case 'blue':
+        return 'green';
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
@@ -119,7 +148,7 @@ export const GameSetup: React.FC<GameSetupProps> = ({
             GAME LOBBY
           </h1>
           <p className="text-slate-400 text-xs sm:text-sm">
-            Select Game Mode & Customize Players/Opponents
+            Select Game Mode & Room Setup
           </p>
         </div>
 
@@ -158,7 +187,7 @@ export const GameSetup: React.FC<GameSetupProps> = ({
         </div>
 
         {errorMessage && (
-          <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-400 text-xs rounded-lg text-center">
+          <div className="p-3 bg-red-500/10 border border-red-500/30 text-red-400 text-xs rounded-lg text-center font-semibold">
             {errorMessage}
           </div>
         )}
@@ -265,43 +294,97 @@ export const GameSetup: React.FC<GameSetupProps> = ({
         {/* TAB 2: HOST ONLINE ROOM */}
         {activeTab === 'host' && (
           <div className="space-y-5 animate-fadeIn">
-            <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-800 space-y-3">
+            {/* Player Count Selection for Online Room */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-2 uppercase tracking-wider">
+                Online Players Capacity
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {[2, 3, 4].map((count) => (
+                  <button
+                    key={count}
+                    onClick={() => setHostMaxPlayers(count)}
+                    className={`py-2.5 rounded-lg text-sm font-extrabold border transition-all ${
+                      hostMaxPlayers === count
+                        ? 'bg-emerald-600 border-emerald-400 text-white shadow-md scale-105'
+                        : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:bg-slate-800'
+                    }`}
+                  >
+                    {count} Players {count === 2 ? '(Opposite Colors)' : ''}
+                  </button>
+                ))}
+              </div>
+              <p className="text-slate-400 text-[11px] mt-1.5 text-center">
+                {hostMaxPlayers === 2
+                  ? '2 Players: Joining friend gets assigned to the diagonal OPPOSITE color!'
+                  : `${hostMaxPlayers} players room capacity`}
+              </p>
+            </div>
+
+            {/* Room Code & Copy Buttons */}
+            <div className="bg-slate-900/80 p-4 rounded-xl border border-slate-800 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-400 uppercase">
-                  Your Room Code
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  6-Digit Room Code
                 </span>
                 <button
                   onClick={() => setCreatedCode(generateRoomCode())}
-                  className="text-xs text-indigo-400 hover:underline"
+                  className="text-xs text-indigo-400 hover:underline font-semibold"
                 >
-                  Generate New
+                  Generate New Code
                 </button>
               </div>
 
-              <div className="flex items-center justify-between bg-slate-950 p-3 rounded-lg border border-slate-800">
-                <span className="text-2xl font-black text-emerald-400 tracking-widest font-mono">
-                  {createdCode}
-                </span>
-                <button
-                  onClick={copyShareableLink}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-md text-xs font-semibold transition-all"
-                >
-                  {copiedLink ? (
-                    <>
-                      <Check className="w-3.5 h-3.5" /> Copied!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" /> Copy Link
-                    </>
-                  )}
-                </button>
+              {/* Room Code Selectable Input */}
+              <div className="flex flex-col sm:flex-row items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={createdCode}
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                  className="w-full bg-slate-950 p-3 rounded-lg border border-slate-800 text-2xl font-black text-emerald-400 tracking-widest font-mono text-center cursor-pointer focus:outline-none focus:border-emerald-500"
+                />
+
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={handleCopyCode}
+                    className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all shadow"
+                  >
+                    {copiedCode ? (
+                      <>
+                        <Check className="w-4 h-4" /> Code Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4" /> Copy Code
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-all shadow"
+                  >
+                    {copiedLink ? (
+                      <>
+                        <Check className="w-4 h-4" /> Link Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4" /> Copy Link
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
 
-            <div className="space-y-3">
+            {/* Host Options */}
+            <div className="space-y-3 bg-slate-900/40 p-4 rounded-xl border border-slate-800/80">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
                   Your Host Name
                 </label>
                 <input
@@ -313,7 +396,7 @@ export const GameSetup: React.FC<GameSetupProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
                   Choose Your Color Position
                 </label>
                 <div className="grid grid-cols-4 gap-2">
@@ -331,11 +414,17 @@ export const GameSetup: React.FC<GameSetupProps> = ({
                     </button>
                   ))}
                 </div>
+
+                {hostMaxPlayers === 2 && (
+                  <p className="text-[11px] text-amber-300 mt-2 text-center">
+                    💡 Host is <strong>{hostColor.toUpperCase()}</strong>. Friend will be assigned to <strong>{getOppositeColor(hostColor).toUpperCase()}</strong>!
+                  </p>
+                )}
               </div>
             </div>
 
             <button
-              onClick={() => onHostOnlineRoom(createdCode, hostColor, hostName, userProfile.avatar)}
+              onClick={() => onHostOnlineRoom(createdCode, hostColor, hostName, userProfile.avatar, hostMaxPlayers)}
               disabled={isConnecting}
               className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-95 text-white font-extrabold rounded-xl shadow-xl transition-transform active:scale-98 flex items-center justify-center gap-2 text-base"
             >
@@ -343,7 +432,7 @@ export const GameSetup: React.FC<GameSetupProps> = ({
                 <span>Creating Room...</span>
               ) : (
                 <>
-                  <Globe className="w-5 h-5" /> CREATE ONLINE ROOM
+                  <Globe className="w-5 h-5" /> CREATE ONLINE ROOM ({hostMaxPlayers} PLAYERS)
                 </>
               )}
             </button>
@@ -355,7 +444,7 @@ export const GameSetup: React.FC<GameSetupProps> = ({
           <div className="space-y-5 animate-fadeIn">
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
                   Enter 6-Digit Room Code
                 </label>
                 <input
@@ -369,7 +458,7 @@ export const GameSetup: React.FC<GameSetupProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                <label className="block text-xs font-bold text-slate-300 mb-1 uppercase tracking-wider">
                   Your Player Name
                 </label>
                 <input

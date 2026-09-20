@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { GameState } from '../types/ludo';
+import { copyToClipboard } from '../utils/multiplayer';
 import { Volume2, VolumeX, RotateCcw, Copy, Check, Scroll, Globe, LogOut } from 'lucide-react';
 
 interface GameControlsProps {
@@ -17,12 +18,14 @@ export const GameControls: React.FC<GameControlsProps> = ({
   const [showLogs, setShowLogs] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
-  const copyRoomLink = () => {
+  const handleCopyRoomLink = async () => {
     if (!gameState.roomCode) return;
     const link = `${window.location.origin}${window.location.pathname}?room=${gameState.roomCode}`;
-    navigator.clipboard.writeText(link);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const ok = await copyToClipboard(link);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   return (
@@ -47,11 +50,15 @@ export const GameControls: React.FC<GameControlsProps> = ({
                 {gameState.roomCode}
               </span>
               <button
-                onClick={copyRoomLink}
-                className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition-colors"
+                onClick={handleCopyRoomLink}
+                className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition-colors flex items-center gap-1"
                 title="Copy Share Link"
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
               </button>
             </div>
           )}

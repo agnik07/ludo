@@ -14,6 +14,7 @@ import {
   selectBotToken,
   addLog,
   getNextTurnIndex,
+  getOppositeColor,
 } from './utils/ludoEngine';
 import { peerNetwork } from './utils/multiplayer';
 import { audioSystem } from './utils/audio';
@@ -50,12 +51,13 @@ export function App() {
     setScreen('setup');
   };
 
-  // 1. Host Online Room
+  // 1. Host Online Room with Player Capacity & Opposite Color Assignment
   const handleHostOnlineRoom = async (
     roomCode: string,
     hostColor: PlayerColor,
     hostName: string,
-    hostAvatar: AvatarId
+    hostAvatar: AvatarId,
+    maxPlayers: number
   ) => {
     setIsConnecting(true);
     setErrorMessage(null);
@@ -70,6 +72,7 @@ export function App() {
         blue: { name: 'Empty Slot', avatar: 'dragon', type: 'bot', isActive: false },
       };
 
+      // Host color
       playerConfigs[hostColor] = {
         name: hostName,
         avatar: hostAvatar,
@@ -77,7 +80,41 @@ export function App() {
         isActive: true,
       };
 
-      const initialState = createInitialGameState('online', playerConfigs, roomCode, true);
+      // Reserve slots based on maxPlayers capacity
+      if (maxPlayers === 2) {
+        const oppositeColor = getOppositeColor(hostColor);
+        playerConfigs[oppositeColor] = {
+          name: 'Waiting for Friend...',
+          avatar: 'star',
+          type: 'remote',
+          isActive: true,
+        };
+      } else if (maxPlayers === 3) {
+        const colors: PlayerColor[] = ['red', 'green', 'yellow', 'blue'];
+        const otherColors = colors.filter((c) => c !== hostColor).slice(0, 2);
+        otherColors.forEach((c) => {
+          playerConfigs[c] = {
+            name: 'Waiting for Player...',
+            avatar: 'star',
+            type: 'remote',
+            isActive: true,
+          };
+        });
+      } else {
+        // 4 Players
+        (['red', 'green', 'yellow', 'blue'] as PlayerColor[]).forEach((c) => {
+          if (c !== hostColor) {
+            playerConfigs[c] = {
+              name: 'Waiting for Player...',
+              avatar: 'star',
+              type: 'remote',
+              isActive: true,
+            };
+          }
+        });
+      }
+
+      const initialState = createInitialGameState('online', playerConfigs, roomCode, true, maxPlayers);
 
       await peerNetwork.initHost(
         roomCode,
@@ -135,34 +172,48 @@ export function App() {
     if (!current) return;
 
     if (msg.type === 'JOIN_REQUEST') {
-      const availableColor = (['red', 'green', 'yellow', 'blue'] as PlayerColor[]).find(
-        (c) => !current.players[c].isActive
-      );
+      let assignedColor: PlayerColor | null = null;
 
-      if (!availableColor) {
+      if (current.maxOnlinePlayers === 2) {
+        // Find host color and pick opposite color
+        const hostColor = (['red', 'green', 'yellow', 'blue'] as PlayerColor[]).find(
+          (c) => current.players[c].isActive && current.players[c].type === 'human'
+        ) || 'red';
+        const oppColor = getOppositeColor(hostColor);
+        if (current.players[oppColor].peerId === undefined) {
+          assignedColor = oppColor;
+        }
+      } else {
+        // 3 or 4 players mode: find first unassigned active slot
+        assignedColor = (['red', 'green', 'yellow', 'blue'] as PlayerColor[]).find(
+          (c) => current.players[c].isActive && current.players[c].peerId === undefined && current.players[c].type !== 'human'
+        ) || null;
+      }
+
+      if (!assignedColor) {
         peerNetwork.sendTo(senderPeerId, { type: 'JOIN_REJECT', senderPeerId: peerNetwork.peerId });
         return;
       }
 
       const updatedState = { ...current };
-      updatedState.players[availableColor] = {
-        color: availableColor,
+      updatedState.players[assignedColor] = {
+        color: assignedColor,
         name: msg.senderName || 'Online Player',
         avatar: msg.senderAvatar || 'star',
         type: 'remote',
         peerId: senderPeerId,
         isActive: true,
-        tokens: updatedState.players[availableColor].tokens,
+        tokens: updatedState.players[assignedColor].tokens,
       };
 
-      if (!updatedState.turnOrder.includes(availableColor)) {
-        updatedState.turnOrder.push(availableColor);
+      if (!updatedState.turnOrder.includes(assignedColor)) {
+        updatedState.turnOrder.push(assignedColor);
       }
 
       addLog(
         updatedState,
-        `🌐 ${msg.senderName} joined room as ${availableColor.toUpperCase()}!`,
-        availableColor
+        `🌐 ${msg.senderName} joined room as ${assignedColor.toUpperCase()}!`,
+        assignedColor
       );
 
       setGameState(updatedState);
@@ -170,7 +221,7 @@ export function App() {
         type: 'STATE_SYNC',
         senderPeerId: peerNetwork.peerId,
         gameState: updatedState,
-        color: availableColor,
+        color: assignedColor,
       });
     } else if (msg.type === 'ROLL_DICE') {
       handleRollDice();

@@ -10,6 +10,35 @@ export function generateRoomCode(): string {
   return code;
 }
 
+export async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) {
+    console.warn('Clipboard API failed, attempting execCommand fallback', e);
+  }
+
+  // Robust fallback for non-secure HTTP contexts or mobile browsers
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    textarea.style.top = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    const successful = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    return successful;
+  } catch (err) {
+    console.error('Copy fallback failed', err);
+    return false;
+  }
+}
+
 export class PeerNetwork {
   private peer: Peer | null = null;
   private connections: Map<string, DataConnection> = new Map();
@@ -55,7 +84,6 @@ export class PeerNetwork {
 
       this.peer.on('error', (err) => {
         console.error('[Multiplayer Host Error]', err);
-        // If ID taken, try generating alternative ID
         if (err.type === 'unavailable-id') {
           reject(new Error('Room code already in use. Please try creating a new room code.'));
         } else {
@@ -88,7 +116,6 @@ export class PeerNetwork {
         this.peerId = id;
         console.log('[Multiplayer Client] Open peer ID:', id);
 
-        // Connect to host
         const conn = this.peer!.connect(hostPeerId, {
           reliable: true,
         });
@@ -148,7 +175,6 @@ export class PeerNetwork {
 
   public broadcast(msg: NetworkMessage) {
     msg.senderPeerId = this.peerId;
-    const dataStr = JSON.stringify(msg);
     this.connections.forEach((conn) => {
       if (conn.open) {
         conn.send(msg);
