@@ -6,6 +6,7 @@ import {
   NetworkMessage,
   UserProfile,
   AvatarId,
+  ChatMessage,
 } from './types/ludo';
 import {
   createInitialGameState,
@@ -51,7 +52,7 @@ export function App() {
     setScreen('setup');
   };
 
-  // 1. Host Online Room with Player Capacity & Opposite Color Assignment
+  // Host Online Room
   const handleHostOnlineRoom = async (
     roomCode: string,
     hostColor: PlayerColor,
@@ -72,7 +73,6 @@ export function App() {
         blue: { name: 'Empty Slot', avatar: 'dragon', type: 'bot', isActive: false },
       };
 
-      // Host color
       playerConfigs[hostColor] = {
         name: hostName,
         avatar: hostAvatar,
@@ -80,7 +80,6 @@ export function App() {
         isActive: true,
       };
 
-      // Reserve slots based on maxPlayers capacity
       if (maxPlayers === 2) {
         const oppositeColor = getOppositeColor(hostColor);
         playerConfigs[oppositeColor] = {
@@ -101,7 +100,6 @@ export function App() {
           };
         });
       } else {
-        // 4 Players
         (['red', 'green', 'yellow', 'blue'] as PlayerColor[]).forEach((c) => {
           if (c !== hostColor) {
             playerConfigs[c] = {
@@ -134,7 +132,7 @@ export function App() {
     }
   };
 
-  // 2. Join Online Room
+  // Join Online Room
   const handleJoinOnlineRoom = async (
     roomCode: string,
     playerName: string,
@@ -148,7 +146,6 @@ export function App() {
         roomCode,
         (msg) => handleNetworkMessageClient(msg),
         () => {
-          // Send join request to host
           peerNetwork.broadcast({
             type: 'JOIN_REQUEST',
             senderPeerId: peerNetwork.peerId,
@@ -175,7 +172,6 @@ export function App() {
       let assignedColor: PlayerColor | null = null;
 
       if (current.maxOnlinePlayers === 2) {
-        // Find host color and pick opposite color
         const hostColor = (['red', 'green', 'yellow', 'blue'] as PlayerColor[]).find(
           (c) => current.players[c].isActive && current.players[c].type === 'human'
         ) || 'red';
@@ -184,7 +180,6 @@ export function App() {
           assignedColor = oppColor;
         }
       } else {
-        // 3 or 4 players mode: find first unassigned active slot
         assignedColor = (['red', 'green', 'yellow', 'blue'] as PlayerColor[]).find(
           (c) => current.players[c].isActive && current.players[c].peerId === undefined && current.players[c].type !== 'human'
         ) || null;
@@ -227,6 +222,8 @@ export function App() {
       handleRollDice();
     } else if (msg.type === 'MOVE_TOKEN' && msg.tokenId !== undefined && msg.color) {
       handleSelectToken(msg.color, msg.tokenId);
+    } else if (msg.type === 'CHAT_MESSAGE' && msg.chatMessage) {
+      handleReceiveChatMessage(msg.chatMessage);
     }
   };
 
@@ -241,6 +238,8 @@ export function App() {
     } else if (msg.type === 'JOIN_REJECT') {
       setErrorMessage('Room is full!');
       peerNetwork.disconnect();
+    } else if (msg.type === 'CHAT_MESSAGE' && msg.chatMessage) {
+      handleReceiveChatMessage(msg.chatMessage);
     }
   };
 
@@ -256,7 +255,7 @@ export function App() {
 
   // Roll Dice Action
   const handleRollDice = () => {
-    if (!gameState || !gameState.canRoll || gameState.isRolling) return;
+    if (!gameState || !gameState.canRoll || gameState.isRolling || gameState.isAnimatingMove) return;
 
     audioSystem.playDiceRoll();
 
@@ -345,9 +344,9 @@ export function App() {
     }, 600);
   };
 
-  // Select Token Move Action
+  // Step-by-Step Animated Token Movement ("Walkable" Hops)
   const handleSelectToken = (color: PlayerColor, tokenId: number) => {
-    if (!gameState || gameState.diceValue === null) return;
+    if (!gameState || gameState.diceValue === null || gameState.isAnimatingMove) return;
 
     if (gameState.mode === 'online' && !gameState.isHost) {
       peerNetwork.broadcast({
@@ -360,35 +359,126 @@ export function App() {
     }
 
     const diceValue = gameState.diceValue;
-    const { newState, capturedColor } = executeMoveToken(gameState, color, tokenId, diceValue);
+    const player = gameState.players[color];
+    const token = player.tokens.find((t) => t.id === tokenId);
+    if (!token) return;
 
-    newState.statusBanner = null;
+    // Lock board state while animating steps
+    setGameState((prev) => (prev ? { ...prev, isAnimatingMove: true } : null));
 
-    // Audio feedback
-    if (capturedColor) {
-      audioSystem.playCapture();
-    } else {
-      audioSystem.playTokenMove();
-    }
+    const totalSteps = token.step === -1 ? 1 : diceValue;
+    let stepCount = 0;
 
-    if (newState.gameStatus === 'finished') {
-      audioSystem.playVictory();
-    }
+    const animateInterval = setInterval(() => {
+      stepCount++;
+      audioSystem.playStepTick(stepCount);
 
-    if (newState.mode === 'online' && newState.isHost) {
+      setGameState((prev) => {
+        if (!prev) return null;
+        const tempState: GameState = JSON.parse(JSON.stringify(prev));
+        const tempToken = tempState.players[color].tokens.find((t) => t.id === tokenId);
+        if (tempToken) {
+          if (tempToken.step === -1) {
+            tempToken.step = 0;
+          } else {
+            tempToken.step += 1;
+          }
+        }
+        return tempState;
+      });
+
+      if (stepCount >= totalSteps) {
+        clearInterval(animateInterval);
+
+        // Final step completed: execute move rules
+        setTimeout(() => {
+          setGameState((latestState) => {
+            if (!latestState) return null;
+            const { newState, capturedColor } = executeMoveToken(latestState, color, tokenId, diceValue);
+            newState.isAnimatingMove = false;
+            newState.statusBanner = null;
+
+            if (capturedColor) {
+              audioSystem.playCapture();
+            } else if (token.step + diceValue === 57) {
+              audioSystem.playHomeEntry();
+            } else if (token.step + diceValue >= 52) {
+              audioSystem.playSafeSpot();
+            }
+
+            if (newState.gameStatus === 'finished') {
+              audioSystem.playVictory();
+            }
+
+            if (newState.mode === 'online' && newState.isHost) {
+              peerNetwork.broadcast({
+                type: 'STATE_SYNC',
+                senderPeerId: peerNetwork.peerId,
+                gameState: newState,
+              });
+            }
+
+            return newState;
+          });
+        }, 120);
+      }
+    }, 130);
+  };
+
+  // Send In-Game Chat Message / Quick Emote
+  const handleSendMessage = (text: string, emoji?: string) => {
+    if (!gameState) return;
+
+    const senderColor = localColor || gameState.turnOrder[gameState.currentTurnIndex];
+    const senderName = gameState.players[senderColor]?.name || 'Player';
+
+    const newMsg: ChatMessage = {
+      id: Math.random().toString(36).substring(2, 9),
+      senderName,
+      color: senderColor,
+      text,
+      emoji,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    handleReceiveChatMessage(newMsg);
+
+    if (gameState.mode === 'online') {
       peerNetwork.broadcast({
-        type: 'STATE_SYNC',
+        type: 'CHAT_MESSAGE',
         senderPeerId: peerNetwork.peerId,
-        gameState: newState,
+        chatMessage: newMsg,
       });
     }
+  };
 
-    setGameState(newState);
+  const handleReceiveChatMessage = (msg: ChatMessage) => {
+    setGameState((prev) => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        chatMessages: [msg, ...(prev.chatMessages || []).slice(0, 25)],
+        activeSpeechBubble: {
+          color: msg.color,
+          text: msg.text,
+          emoji: msg.emoji,
+          timestamp: Date.now(),
+        },
+      };
+    });
+
+    // Clear speech bubble after 3.5 seconds
+    setTimeout(() => {
+      setGameState((prev) => {
+        if (!prev) return null;
+        return { ...prev, activeSpeechBubble: null };
+      });
+    }, 3500);
   };
 
   // Bot Turn Automation Loop
   useEffect(() => {
-    if (!gameState || gameState.gameStatus !== 'playing') return;
+    if (!gameState || gameState.gameStatus !== 'playing' || gameState.isAnimatingMove) return;
 
     const activeColor = gameState.turnOrder[gameState.currentTurnIndex];
     const activePlayer = gameState.players[activeColor];
@@ -427,6 +517,7 @@ export function App() {
     gameState?.currentTurnIndex,
     gameState?.canRoll,
     gameState?.isRolling,
+    gameState?.isAnimatingMove,
     gameState?.diceValue,
     gameState?.gameStatus,
   ]);
@@ -475,6 +566,7 @@ export function App() {
           setGameState((prev) => (prev ? { ...prev, soundEnabled: !prev.soundEnabled } : null))
         }
         onExitGame={handleExitGame}
+        onSendMessage={handleSendMessage}
       />
 
       {/* Status Notification Banner */}
@@ -493,6 +585,11 @@ export function App() {
               key={color}
               player={gameState.players[color]}
               isCurrentTurn={color === activeColor}
+              speechBubble={
+                gameState.activeSpeechBubble?.color === color
+                  ? gameState.activeSpeechBubble
+                  : null
+              }
             />
           ))}
         </div>
@@ -505,10 +602,10 @@ export function App() {
           <Dice3D
             value={gameState.diceValue}
             isRolling={gameState.isRolling}
-            canRoll={gameState.canRoll && isMyTurn}
+            canRoll={gameState.canRoll && isMyTurn && !gameState.isAnimatingMove}
             activeColor={activeColor}
             onRoll={handleRollDice}
-            disabled={!isMyTurn}
+            disabled={!isMyTurn || gameState.isAnimatingMove}
           />
         </div>
 
@@ -519,6 +616,11 @@ export function App() {
               key={color}
               player={gameState.players[color]}
               isCurrentTurn={color === activeColor}
+              speechBubble={
+                gameState.activeSpeechBubble?.color === color
+                  ? gameState.activeSpeechBubble
+                  : null
+              }
             />
           ))}
         </div>

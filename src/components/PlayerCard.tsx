@@ -6,9 +6,14 @@ import { Bot, User, Globe, Trophy } from 'lucide-react';
 interface PlayerCardProps {
   player: Player;
   isCurrentTurn: boolean;
+  speechBubble?: { text: string; emoji?: string } | null;
 }
 
-export const PlayerCard: React.FC<PlayerCardProps> = ({ player, isCurrentTurn }) => {
+export const PlayerCard: React.FC<PlayerCardProps> = ({
+  player,
+  isCurrentTurn,
+  speechBubble,
+}) => {
   if (!player.isActive) return null;
 
   const finishedCount = player.tokens.filter((t) => t.isFinished).length;
@@ -45,12 +50,21 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({ player, isCurrentTurn })
 
   return (
     <div
-      className={`p-3 rounded-xl border transition-all ${
+      className={`p-3 rounded-xl border relative transition-all ${
         isCurrentTurn
           ? `${style.bg} ${style.border} ring-2 ring-${player.color}-400/80 shadow-xl scale-102 animate-pulse`
           : 'bg-slate-900/40 border-slate-800 opacity-85'
       }`}
     >
+      {/* Floating Animated Speech Bubble */}
+      {speechBubble && (
+        <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-30 px-3 py-1.5 bg-slate-900 border border-indigo-400/70 text-white font-bold text-xs rounded-2xl shadow-xl animate-bounce whitespace-nowrap flex items-center gap-1">
+          {speechBubble.emoji && <span className="text-base">{speechBubble.emoji}</span>}
+          <span>{speechBubble.text}</span>
+          <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-slate-900 border-r border-b border-indigo-400/70 rotate-45" />
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 overflow-hidden">
           <span className="text-xl">{avatarEmoji}</span>

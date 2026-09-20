@@ -42,6 +42,15 @@ export interface GameLog {
   color?: PlayerColor;
 }
 
+export interface ChatMessage {
+  id: string;
+  senderName: string;
+  color: PlayerColor;
+  text: string;
+  emoji?: string;
+  time: string;
+}
+
 export interface StatusBanner {
   text: string;
   type: 'info' | 'warning' | 'success';
@@ -58,12 +67,15 @@ export interface GameState {
   currentTurnIndex: number;
   diceValue: number | null;
   isRolling: boolean;
+  isAnimatingMove: boolean; // True while token is taking step-by-step walkable hops
   canRoll: boolean;
   consecutiveSixes: number;
   hasRolledSix: boolean;
   winnerOrder: PlayerColor[];
   gameStatus: 'setup' | 'playing' | 'finished';
   logs: GameLog[];
+  chatMessages: ChatMessage[];
+  activeSpeechBubble?: { color: PlayerColor; text: string; emoji?: string; timestamp: number } | null;
   selectedTokenId: number | null;
   validTokenMoves: number[]; // token IDs that can legally move with current diceValue
   soundEnabled: boolean;
@@ -77,6 +89,7 @@ export type NetworkMessageType =
   | 'STATE_SYNC'
   | 'ROLL_DICE'
   | 'MOVE_TOKEN'
+  | 'CHAT_MESSAGE'
   | 'RESTART_GAME'
   | 'PLAYER_UPDATE'
   | 'HEARTBEAT';
@@ -90,6 +103,7 @@ export interface NetworkMessage {
   color?: PlayerColor;
   diceValue?: number;
   tokenId?: number;
+  chatMessage?: ChatMessage;
   gameState?: Partial<GameState>;
   payload?: any;
 }

@@ -1,21 +1,25 @@
 import React, { useState } from 'react';
 import { GameState } from '../types/ludo';
 import { copyToClipboard } from '../utils/multiplayer';
-import { Volume2, VolumeX, RotateCcw, Copy, Check, Scroll, Globe, LogOut } from 'lucide-react';
+import { ChatDrawer } from './ChatDrawer';
+import { Volume2, VolumeX, Copy, Check, Scroll, Globe, LogOut, MessageSquare } from 'lucide-react';
 
 interface GameControlsProps {
   gameState: GameState;
   onToggleSound: () => void;
   onExitGame: () => void;
+  onSendMessage: (text: string, emoji?: string) => void;
 }
 
 export const GameControls: React.FC<GameControlsProps> = ({
   gameState,
   onToggleSound,
   onExitGame,
+  onSendMessage,
 }) => {
   const [copied, setCopied] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   const handleCopyRoomLink = async () => {
@@ -64,8 +68,18 @@ export const GameControls: React.FC<GameControlsProps> = ({
           )}
         </div>
 
-        {/* Right Side: Log Drawer & Sound */}
+        {/* Right Side: Chat & Log Drawer & Sound */}
         <div className="flex items-center gap-2">
+          {/* Chat Button */}
+          <button
+            onClick={() => setShowChat(true)}
+            className="p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95"
+            title="Open Chat & Emotes"
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span className="hidden sm:inline">Chat</span>
+          </button>
+
           <button
             onClick={() => setShowLogs(!showLogs)}
             className={`p-2 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all ${
@@ -90,6 +104,15 @@ export const GameControls: React.FC<GameControlsProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Chat & Emotes Modal Drawer */}
+      {showChat && (
+        <ChatDrawer
+          messages={gameState.chatMessages || []}
+          onSendMessage={onSendMessage}
+          onClose={() => setShowChat(false)}
+        />
+      )}
 
       {/* Exit Confirmation Modal */}
       {showExitConfirm && (

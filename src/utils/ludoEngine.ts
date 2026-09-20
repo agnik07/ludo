@@ -84,7 +84,9 @@ export function createInitialGameState(
     currentTurnIndex: 0,
     diceValue: null,
     isRolling: false,
+    isAnimatingMove: false,
     canRoll: true,
+
     consecutiveSixes: 0,
     hasRolledSix: false,
     winnerOrder: [],
@@ -97,7 +99,9 @@ export function createInitialGameState(
         color: firstTurn,
       },
     ],
+    chatMessages: [],
     selectedTokenId: null,
+
     validTokenMoves: [],
     soundEnabled: true,
   };
