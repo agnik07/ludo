@@ -58,8 +58,10 @@ export function createInitialGameState(
   const firstTurn = turnOrder.length > 0 ? turnOrder[0] : 'red';
 
   return {
+    screen: 'playing',
     mode,
     roomCode,
+
     isHost,
     players,
     turnOrder,

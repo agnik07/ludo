@@ -1,7 +1,7 @@
 import React from 'react';
 import { GameState, PlayerColor, Token } from '../types/ludo';
-import { getTokenGridPos, SAFE_INDICES, MAIN_PATH } from '../utils/ludoBoard';
-import { Star, Shield } from 'lucide-react';
+import { getTokenGridPos } from '../utils/ludoBoard';
+import { Star, Shield, Info } from 'lucide-react';
 
 interface LudoBoardProps {
   gameState: GameState;
@@ -10,6 +10,7 @@ interface LudoBoardProps {
 
 export const LudoBoard: React.FC<LudoBoardProps> = ({ gameState, onSelectToken }) => {
   const activeColor = gameState.turnOrder[gameState.currentTurnIndex];
+  const activePlayer = gameState.players[activeColor];
 
   // Helper to map grid (row, col) to cell type/color
   const getCellProperties = (row: number, col: number) => {
@@ -72,10 +73,16 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({ gameState, onSelectToken }
     const key = `${row}-${col}`;
     const tokensHere = tokenMap.get(key) || [];
 
+    // Check if cell contains a movable token
+    const movableToken = tokensHere.find(
+      ({ token, color }) => color === activeColor && gameState.validTokenMoves.includes(token.id)
+    );
+
     return (
       <div
         key={key}
-        className={`cell ${props.bg}`}
+        onClick={() => movableToken && onSelectToken(movableToken.color, movableToken.token.id)}
+        className={`cell ${props.bg} ${movableToken ? 'cursor-pointer ring-2 ring-white/60' : ''}`}
         style={{ gridRow: row, gridColumn: col }}
       >
         {props.isStar && (
@@ -102,19 +109,20 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({ gameState, onSelectToken }
 
       return (
         <div
-          onClick={() => isMovable && onSelectToken(color, token.id)}
+          onClick={(e) => {
+            if (isMovable) {
+              e.stopPropagation();
+              onSelectToken(color, token.id);
+            }
+          }}
           className={`ludo-token token-${color} ${isMovable ? 'movable' : ''}`}
         >
-          <div className="w-2 h-2 rounded-full bg-white/80" />
+          <div className="w-2.5 h-2.5 rounded-full bg-white/90" />
         </div>
       );
     }
 
     // Stacked Multiple Tokens in same cell
-    const isAnyMovable = tokensHere.some(
-      ({ token, color }) => color === activeColor && gameState.validTokenMoves.includes(token.id)
-    );
-
     return (
       <div className="relative w-full h-full flex items-center justify-center">
         {tokensHere.map(({ token, color }, idx) => {
@@ -125,16 +133,21 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({ gameState, onSelectToken }
           return (
             <div
               key={`${color}-${token.id}`}
-              onClick={() => isMovable && onSelectToken(color, token.id)}
+              onClick={(e) => {
+                if (isMovable) {
+                  e.stopPropagation();
+                  onSelectToken(color, token.id);
+                }
+              }}
               className={`ludo-token token-${color} absolute ${isMovable ? 'movable' : ''}`}
               style={{
-                width: '70%',
-                height: '70%',
+                width: '75%',
+                height: '75%',
                 transform: `translate(${offset}px, ${-offset}px)`,
                 zIndex: 10 + idx,
               }}
             >
-              <span className="text-[9px] font-black text-white">{token.id + 1}</span>
+              <span className="text-[10px] font-black text-white">{token.id + 1}</span>
             </div>
           );
         })}
@@ -155,14 +168,17 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({ gameState, onSelectToken }
             gameState.validTokenMoves.includes(token.id);
 
           return (
-            <div key={token.id} className="yard-circle">
+            <div
+              key={token.id}
+              onClick={() => isMovable && onSelectToken(color, token.id)}
+              className={`yard-circle ${isMovable ? 'cursor-pointer ring-2 ring-white/80 animate-pulse' : ''}`}
+            >
               {token.step === -1 && (
                 <div
-                  onClick={() => isMovable && onSelectToken(color, token.id)}
                   className={`ludo-token token-${color} ${isMovable ? 'movable' : ''}`}
-                  style={{ width: '85%', height: '85%' }}
+                  style={{ width: '90%', height: '90%' }}
                 >
-                  <div className="w-2.5 h-2.5 rounded-full bg-white/90" />
+                  <div className="w-3 h-3 rounded-full bg-white/90" />
                 </div>
               )}
             </div>
@@ -179,8 +195,27 @@ export const LudoBoard: React.FC<LudoBoardProps> = ({ gameState, onSelectToken }
     }
   }
 
+  // Instruction banner for active player
+  let helperText = '';
+  if (gameState.validTokenMoves.length > 0) {
+    if (gameState.diceValue === 6) {
+      helperText = `🎉 You rolled a 6! Tap any highlighted ${activeColor.toUpperCase()} token to release it from yard!`;
+    } else {
+      helperText = `👉 Tap any highlighted ${activeColor.toUpperCase()} token to move ${gameState.diceValue} steps!`;
+    }
+  }
+
   return (
-    <div className="w-full flex justify-center items-center p-2">
+    <div className="w-full flex flex-col items-center gap-2">
+      {/* Helper Banner */}
+      {helperText && (
+        <div className="w-full max-w-md px-3 py-2 bg-indigo-600/30 border border-indigo-500/40 rounded-xl flex items-center justify-center gap-2 text-xs font-bold text-indigo-200 animate-fadeIn">
+          <Info className="w-4 h-4 shrink-0 text-indigo-400" />
+          <span className="text-center">{helperText}</span>
+        </div>
+      )}
+
+      {/* 15x15 Ludo Board Grid */}
       <div className="ludo-grid">
         {/* Yard Base: Red */}
         <div className="yard-red">{renderYardTokens('red')}</div>

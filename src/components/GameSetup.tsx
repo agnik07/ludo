@@ -1,23 +1,29 @@
 import React, { useState } from 'react';
-import { GameMode, PlayerColor, PlayerType } from '../types/ludo';
+import { GameMode, PlayerColor, PlayerType, UserProfile, AvatarId } from '../types/ludo';
 import { generateRoomCode } from '../utils/multiplayer';
-import { Users, Globe, Play, Copy, Check, Bot, User, Sparkles } from 'lucide-react';
+import { AVATARS } from './LoginScreen';
+import { Users, Globe, Play, Copy, Check, Bot, User, Sparkles, ArrowLeft } from 'lucide-react';
 
 interface GameSetupProps {
+  userProfile: UserProfile;
+  onBackToLogin: () => void;
   onStartLocalGame: (
-    configs: Record<PlayerColor, { name: string; type: PlayerType; isActive: boolean }>
+    configs: Record<PlayerColor, { name: string; avatar?: AvatarId; type: PlayerType; isActive: boolean }>
   ) => void;
   onHostOnlineRoom: (
     roomCode: string,
     hostColor: PlayerColor,
-    hostName: string
+    hostName: string,
+    hostAvatar: AvatarId
   ) => void;
-  onJoinOnlineRoom: (roomCode: string, playerName: string) => void;
+  onJoinOnlineRoom: (roomCode: string, playerName: string, playerAvatar: AvatarId) => void;
   isConnecting: boolean;
   errorMessage: string | null;
 }
 
 export const GameSetup: React.FC<GameSetupProps> = ({
+  userProfile,
+  onBackToLogin,
   onStartLocalGame,
   onHostOnlineRoom,
   onJoinOnlineRoom,
@@ -29,20 +35,20 @@ export const GameSetup: React.FC<GameSetupProps> = ({
   // Local game state setup
   const [playerCount, setPlayerCount] = useState<number>(4);
   const [localPlayers, setLocalPlayers] = useState<
-    Record<PlayerColor, { name: string; type: PlayerType; isActive: boolean }>
+    Record<PlayerColor, { name: string; avatar?: AvatarId; type: PlayerType; isActive: boolean }>
   >({
-    red: { name: 'Red Player', type: 'human', isActive: true },
-    green: { name: 'Green Bot', type: 'bot', isActive: true },
-    yellow: { name: 'Yellow Bot', type: 'bot', isActive: true },
-    blue: { name: 'Blue Bot', type: 'bot', isActive: true },
+    red: { name: userProfile.name, avatar: userProfile.avatar, type: 'human', isActive: true },
+    green: { name: 'Green Bot', avatar: 'robot', type: 'bot', isActive: true },
+    yellow: { name: 'Yellow Bot', avatar: 'wizard', type: 'bot', isActive: true },
+    blue: { name: 'Blue Bot', avatar: 'ninja', type: 'bot', isActive: true },
   });
 
   // Online Room setup
-  const [hostName, setHostName] = useState('Player 1');
-  const [hostColor, setHostColor] = useState<PlayerColor>('red');
+  const [hostName, setHostName] = useState(userProfile.name);
+  const [hostColor, setHostColor] = useState<PlayerColor>(userProfile.preferredColor);
   const [createdCode, setCreatedCode] = useState(() => generateRoomCode());
   const [joinCodeInput, setJoinCodeInput] = useState('');
-  const [joinNameInput, setJoinNameInput] = useState('Friend');
+  const [joinNameInput, setJoinNameInput] = useState(userProfile.name);
   const [copiedLink, setCopiedLink] = useState(false);
 
   // Check URL query param for auto-fill room code
@@ -65,11 +71,12 @@ export const GameSetup: React.FC<GameSetupProps> = ({
         updated[color].isActive = true;
         if (index === 0) {
           updated[color].type = 'human';
-          updated[color].name = 'Player 1';
+          updated[color].name = userProfile.name;
+          updated[color].avatar = userProfile.avatar;
         } else {
-          // If count == 1, 3 bots. If count == 2, 2 humans or human/bot
           updated[color].type = count === 1 ? 'bot' : 'human';
           updated[color].name = count === 1 ? `${color.toUpperCase()} Bot` : `Player ${index + 1}`;
+          updated[color].avatar = AVATARS[index % AVATARS.length].id;
         }
       } else {
         updated[color].isActive = false;
@@ -86,19 +93,33 @@ export const GameSetup: React.FC<GameSetupProps> = ({
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  const userAvatarIcon = AVATARS.find((a) => a.id === userProfile.avatar)?.icon || '👑';
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-xl glass-panel p-6 sm:p-8 space-y-6 border border-slate-700/50">
-        {/* Header Title */}
-        <div className="text-center space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 text-xs font-semibold tracking-wider uppercase border border-indigo-500/20">
-            <Sparkles className="w-4 h-4" /> Ready to Play Ludo
+      <div className="w-full max-w-xl glass-panel p-6 sm:p-8 space-y-6 border border-slate-700/50 relative animate-fadeIn">
+        {/* Top Header Navigation */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={onBackToLogin}
+            className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" /> Change Profile
+          </button>
+
+          <div className="flex items-center gap-2 px-3 py-1 bg-slate-900/80 rounded-full border border-slate-800 text-xs font-bold text-slate-200">
+            <span>{userAvatarIcon}</span>
+            <span>{userProfile.name}</span>
           </div>
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-yellow-400 to-emerald-400">
-            LUDO MASTER
+        </div>
+
+        {/* Title */}
+        <div className="text-center space-y-1">
+          <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-yellow-400 to-emerald-400">
+            GAME LOBBY
           </h1>
-          <p className="text-slate-400 text-sm">
-            Play locally on 1 device or remotely online with friends!
+          <p className="text-slate-400 text-xs sm:text-sm">
+            Select Game Mode & Customize Players/Opponents
           </p>
         </div>
 
@@ -164,11 +185,6 @@ export const GameSetup: React.FC<GameSetupProps> = ({
                   </button>
                 ))}
               </div>
-              <p className="text-slate-400 text-xs mt-1.5 text-center">
-                {playerCount === 1
-                  ? 'Solo Mode: You vs 3 Smart AI Bots'
-                  : `${playerCount} active players on this device`}
-              </p>
             </div>
 
             {/* Player Customization */}
@@ -286,7 +302,7 @@ export const GameSetup: React.FC<GameSetupProps> = ({
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Your Name
+                  Your Host Name
                 </label>
                 <input
                   type="text"
@@ -298,7 +314,7 @@ export const GameSetup: React.FC<GameSetupProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Choose Color Position
+                  Choose Your Color Position
                 </label>
                 <div className="grid grid-cols-4 gap-2">
                   {(['red', 'green', 'yellow', 'blue'] as PlayerColor[]).map((c) => (
@@ -319,7 +335,7 @@ export const GameSetup: React.FC<GameSetupProps> = ({
             </div>
 
             <button
-              onClick={() => onHostOnlineRoom(createdCode, hostColor, hostName)}
+              onClick={() => onHostOnlineRoom(createdCode, hostColor, hostName, userProfile.avatar)}
               disabled={isConnecting}
               className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-95 text-white font-extrabold rounded-xl shadow-xl transition-transform active:scale-98 flex items-center justify-center gap-2 text-base"
             >
@@ -366,7 +382,7 @@ export const GameSetup: React.FC<GameSetupProps> = ({
             </div>
 
             <button
-              onClick={() => onJoinOnlineRoom(joinCodeInput, joinNameInput)}
+              onClick={() => onJoinOnlineRoom(joinCodeInput, joinNameInput, userProfile.avatar)}
               disabled={isConnecting || !joinCodeInput.trim()}
               className="w-full py-3.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:opacity-95 text-white font-extrabold rounded-xl shadow-xl transition-transform active:scale-98 flex items-center justify-center gap-2 text-base disabled:opacity-50"
             >

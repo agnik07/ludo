@@ -1,5 +1,6 @@
 import React from 'react';
 import { Player, PlayerColor } from '../types/ludo';
+import { AVATARS } from './LoginScreen';
 import { Bot, User, Globe, Trophy } from 'lucide-react';
 
 interface PlayerCardProps {
@@ -11,29 +12,30 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({ player, isCurrentTurn })
   if (!player.isActive) return null;
 
   const finishedCount = player.tokens.filter((t) => t.isFinished).length;
+  const avatarEmoji = AVATARS.find((a) => a.id === player.avatar)?.icon || '👑';
 
   const colorStyles: Record<PlayerColor, { border: string; bg: string; badge: string; text: string }> = {
     red: {
-      border: 'border-red-500/40',
-      bg: 'bg-red-500/10',
+      border: 'border-red-500/50',
+      bg: 'bg-red-500/15',
       badge: 'bg-red-500/20 text-red-300 border-red-500/30',
       text: 'text-red-400',
     },
     green: {
-      border: 'border-emerald-500/40',
-      bg: 'bg-emerald-500/10',
+      border: 'border-emerald-500/50',
+      bg: 'bg-emerald-500/15',
       badge: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
       text: 'text-emerald-400',
     },
     yellow: {
-      border: 'border-amber-500/40',
-      bg: 'bg-amber-500/10',
+      border: 'border-amber-500/50',
+      bg: 'bg-amber-500/15',
       badge: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
       text: 'text-amber-400',
     },
     blue: {
-      border: 'border-blue-500/40',
-      bg: 'bg-blue-500/10',
+      border: 'border-blue-500/50',
+      bg: 'bg-blue-500/15',
       badge: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
       text: 'text-blue-400',
     },
@@ -45,14 +47,19 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({ player, isCurrentTurn })
     <div
       className={`p-3 rounded-xl border transition-all ${
         isCurrentTurn
-          ? `${style.bg} ${style.border} ring-2 ring-${player.color}-400/60 shadow-lg scale-102`
-          : 'bg-slate-900/40 border-slate-800 opacity-80'
+          ? `${style.bg} ${style.border} ring-2 ring-${player.color}-400/80 shadow-xl scale-102 animate-pulse`
+          : 'bg-slate-900/40 border-slate-800 opacity-85'
       }`}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 overflow-hidden">
-          <div className={`w-3 h-3 rounded-full bg-${player.color}-500 shrink-0`} />
-          <span className="font-bold text-sm text-slate-200 truncate">{player.name}</span>
+          <span className="text-xl">{avatarEmoji}</span>
+          <div className="flex flex-col overflow-hidden">
+            <span className="font-bold text-sm text-slate-200 truncate">{player.name}</span>
+            <span className={`text-[10px] font-bold uppercase tracking-wider ${style.text}`}>
+              {player.color}
+            </span>
+          </div>
         </div>
 
         <div className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${style.badge}`}>

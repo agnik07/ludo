@@ -1,5 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GameState, PlayerColor, PlayerType, NetworkMessage } from './types/ludo';
+import {
+  GameState,
+  PlayerColor,
+  PlayerType,
+  NetworkMessage,
+  UserProfile,
+  AvatarId,
+} from './types/ludo';
 import {
   createInitialGameState,
   calculateValidMoves,
@@ -10,6 +17,7 @@ import {
 } from './utils/ludoEngine';
 import { peerNetwork } from './utils/multiplayer';
 import { audioSystem } from './utils/audio';
+import { LoginScreen } from './components/LoginScreen';
 import { GameSetup } from './components/GameSetup';
 import { LudoBoard } from './components/LudoBoard';
 import { Dice3D } from './components/Dice3D';
@@ -18,6 +26,9 @@ import { GameControls } from './components/GameControls';
 import { WinModal } from './components/WinModal';
 
 export function App() {
+  const [screen, setScreen] = useState<'login' | 'setup' | 'playing'>('login');
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -33,24 +44,38 @@ export function App() {
     }
   }, [gameState?.soundEnabled]);
 
+  // Handle Login Screen Profile Submit
+  const handleLogin = (profile: UserProfile) => {
+    setUserProfile(profile);
+    setScreen('setup');
+  };
+
   // 1. Host Online Room
   const handleHostOnlineRoom = async (
     roomCode: string,
     hostColor: PlayerColor,
-    hostName: string
+    hostName: string,
+    hostAvatar: AvatarId
   ) => {
     setIsConnecting(true);
     setErrorMessage(null);
 
     try {
-      const playerConfigs: Partial<Record<PlayerColor, { name: string; type: PlayerType; isActive: boolean }>> = {
-        red: { name: 'Empty Slot', type: 'bot', isActive: false },
-        green: { name: 'Empty Slot', type: 'bot', isActive: false },
-        yellow: { name: 'Empty Slot', type: 'bot', isActive: false },
-        blue: { name: 'Empty Slot', type: 'bot', isActive: false },
+      const playerConfigs: Partial<
+        Record<PlayerColor, { name: string; avatar?: AvatarId; type: PlayerType; isActive: boolean }>
+      > = {
+        red: { name: 'Empty Slot', avatar: 'robot', type: 'bot', isActive: false },
+        green: { name: 'Empty Slot', avatar: 'ninja', type: 'bot', isActive: false },
+        yellow: { name: 'Empty Slot', avatar: 'wizard', type: 'bot', isActive: false },
+        blue: { name: 'Empty Slot', avatar: 'dragon', type: 'bot', isActive: false },
       };
 
-      playerConfigs[hostColor] = { name: hostName, type: 'human', isActive: true };
+      playerConfigs[hostColor] = {
+        name: hostName,
+        avatar: hostAvatar,
+        type: 'human',
+        isActive: true,
+      };
 
       const initialState = createInitialGameState('online', playerConfigs, roomCode, true);
 
@@ -63,6 +88,7 @@ export function App() {
 
       setLocalColor(hostColor);
       setGameState(initialState);
+      setScreen('playing');
       setIsConnecting(false);
     } catch (err: any) {
       console.error(err);
@@ -72,7 +98,11 @@ export function App() {
   };
 
   // 2. Join Online Room
-  const handleJoinOnlineRoom = async (roomCode: string, playerName: string) => {
+  const handleJoinOnlineRoom = async (
+    roomCode: string,
+    playerName: string,
+    playerAvatar: AvatarId
+  ) => {
     setIsConnecting(true);
     setErrorMessage(null);
 
@@ -86,6 +116,7 @@ export function App() {
             type: 'JOIN_REQUEST',
             senderPeerId: peerNetwork.peerId,
             senderName: playerName,
+            senderAvatar: playerAvatar,
             roomCode,
           });
         }
@@ -104,7 +135,6 @@ export function App() {
     if (!current) return;
 
     if (msg.type === 'JOIN_REQUEST') {
-      // Find first inactive slot for joining player
       const availableColor = (['red', 'green', 'yellow', 'blue'] as PlayerColor[]).find(
         (c) => !current.players[c].isActive
       );
@@ -118,6 +148,7 @@ export function App() {
       updatedState.players[availableColor] = {
         color: availableColor,
         name: msg.senderName || 'Online Player',
+        avatar: msg.senderAvatar || 'star',
         type: 'remote',
         peerId: senderPeerId,
         isActive: true,
@@ -128,7 +159,11 @@ export function App() {
         updatedState.turnOrder.push(availableColor);
       }
 
-      addLog(updatedState, `🌐 ${msg.senderName} joined room as ${availableColor.toUpperCase()}!`, availableColor);
+      addLog(
+        updatedState,
+        `🌐 ${msg.senderName} joined room as ${availableColor.toUpperCase()}!`,
+        availableColor
+      );
 
       setGameState(updatedState);
       peerNetwork.broadcast({
@@ -148,6 +183,7 @@ export function App() {
   const handleNetworkMessageClient = (msg: NetworkMessage) => {
     if (msg.type === 'STATE_SYNC' && msg.gameState) {
       setGameState(msg.gameState as GameState);
+      setScreen('playing');
       if (msg.color) {
         setLocalColor(msg.color);
       }
@@ -159,11 +195,12 @@ export function App() {
 
   // Start Local / Vs AI Game
   const handleStartLocalGame = (
-    configs: Record<PlayerColor, { name: string; type: PlayerType; isActive: boolean }>
+    configs: Record<PlayerColor, { name: string; avatar?: AvatarId; type: PlayerType; isActive: boolean }>
   ) => {
     const initialState = createInitialGameState('local', configs);
     setLocalColor(null);
     setGameState(initialState);
+    setScreen('playing');
   };
 
   // Roll Dice Action
@@ -172,7 +209,7 @@ export function App() {
 
     audioSystem.playDiceRoll();
 
-    setGameState((prev) => (prev ? { ...prev, isRolling: true } : null));
+    setGameState((prev) => (prev ? { ...prev, isRolling: true, statusBanner: null } : null));
 
     setTimeout(() => {
       setGameState((prev) => {
@@ -214,15 +251,20 @@ export function App() {
 
         addLog(nextState, `🎲 ${activePlayer.name} rolled a ${diceValue}.`, activeColor);
 
-        // If no valid moves: pass turn after short pause
+        // If no valid moves: show banner and auto-pass turn
         if (validMoves.length === 0) {
-          addLog(nextState, `❌ No valid moves for ${activePlayer.name}.`, activeColor);
+          nextState.statusBanner = {
+            text: `⚠️ No valid moves for ${activePlayer.name} (Rolled ${diceValue}). Passing turn...`,
+            type: 'warning',
+          };
+
           setTimeout(() => {
             setGameState((stateBeforePass) => {
               if (!stateBeforePass) return null;
               const passedState = { ...stateBeforePass };
               passedState.diceValue = null;
               passedState.canRoll = true;
+              passedState.statusBanner = null;
               passedState.currentTurnIndex = getNextTurnIndex(passedState);
               passedState.consecutiveSixes = 0;
 
@@ -236,7 +278,7 @@ export function App() {
 
               return passedState;
             });
-          }, 1200);
+          }, 1100);
         }
 
         if (nextState.mode === 'online' && nextState.isHost) {
@@ -257,7 +299,6 @@ export function App() {
     if (!gameState || gameState.diceValue === null) return;
 
     if (gameState.mode === 'online' && !gameState.isHost) {
-      // Send move token request to host
       peerNetwork.broadcast({
         type: 'MOVE_TOKEN',
         senderPeerId: peerNetwork.peerId,
@@ -269,6 +310,8 @@ export function App() {
 
     const diceValue = gameState.diceValue;
     const { newState, capturedColor } = executeMoveToken(gameState, color, tokenId, diceValue);
+
+    newState.statusBanner = null;
 
     // Audio feedback
     if (capturedColor) {
@@ -301,7 +344,6 @@ export function App() {
 
     if (!activePlayer || activePlayer.type !== 'bot') return;
 
-    // Only host drives bot turns in online mode
     if (gameState.mode === 'online' && !gameState.isHost) return;
 
     let timer: NodeJS.Timeout | null = null;
@@ -338,11 +380,24 @@ export function App() {
     gameState?.gameStatus,
   ]);
 
+  // Exit Game back to Setup
+  const handleExitGame = () => {
+    peerNetwork.disconnect();
+    setGameState(null);
+    setScreen('setup');
+  };
 
-  // Render Setup Screen if game not started
-  if (!gameState || gameState.gameStatus === 'setup') {
+  // SCREEN 1: LOGIN
+  if (screen === 'login' || !userProfile) {
+    return <LoginScreen initialProfile={userProfile || undefined} onLogin={handleLogin} />;
+  }
+
+  // SCREEN 2: GAME LOBBY & SETUP
+  if (screen === 'setup' || !gameState || gameState.gameStatus === 'setup') {
     return (
       <GameSetup
+        userProfile={userProfile}
+        onBackToLogin={() => setScreen('login')}
         onStartLocalGame={handleStartLocalGame}
         onHostOnlineRoom={handleHostOnlineRoom}
         onJoinOnlineRoom={handleJoinOnlineRoom}
@@ -352,27 +407,31 @@ export function App() {
     );
   }
 
+  // SCREEN 3: GAME ARENA
   const activeColor = gameState.turnOrder[gameState.currentTurnIndex];
   const activePlayer = gameState.players[activeColor];
 
-  // Disable controls if online client and not client's turn
   const isMyTurn =
     gameState.mode === 'local' ||
     (localColor !== null && activeColor === localColor && activePlayer.type !== 'bot');
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-between p-2 sm:p-4 max-w-5xl mx-auto">
+    <div className="min-h-screen flex flex-col items-center justify-between p-2 sm:p-4 max-w-5xl mx-auto animate-fadeIn">
       {/* Header & Controls */}
       <GameControls
         gameState={gameState}
         onToggleSound={() =>
           setGameState((prev) => (prev ? { ...prev, soundEnabled: !prev.soundEnabled } : null))
         }
-        onRestartGame={() => {
-          peerNetwork.disconnect();
-          setGameState(null);
-        }}
+        onExitGame={handleExitGame}
       />
+
+      {/* Status Notification Banner */}
+      {gameState.statusBanner && (
+        <div className="w-full max-w-md px-4 py-2 bg-amber-500/20 border border-amber-500/40 rounded-xl text-xs font-bold text-amber-300 text-center animate-bounce my-1">
+          {gameState.statusBanner.text}
+        </div>
+      )}
 
       {/* Main Board Layout & Sidebar */}
       <div className="w-full flex flex-col md:flex-row items-center justify-center gap-4 my-2">
@@ -416,13 +475,7 @@ export function App() {
 
       {/* Win Celebration Modal */}
       {gameState.gameStatus === 'finished' && (
-        <WinModal
-          gameState={gameState}
-          onPlayAgain={() => {
-            peerNetwork.disconnect();
-            setGameState(null);
-          }}
-        />
+        <WinModal gameState={gameState} onPlayAgain={handleExitGame} />
       )}
     </div>
   );

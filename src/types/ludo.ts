@@ -4,6 +4,14 @@ export type PlayerType = 'human' | 'bot' | 'remote';
 
 export type GameMode = 'local' | 'online';
 
+export type AvatarId = 'king' | 'robot' | 'ninja' | 'wizard' | 'dragon' | 'star';
+
+export interface UserProfile {
+  name: string;
+  avatar: AvatarId;
+  preferredColor: PlayerColor;
+}
+
 export interface GridPos {
   row: number; // 1 to 15 (1-indexed for CSS grid)
   col: number; // 1 to 15 (1-indexed for CSS grid)
@@ -19,6 +27,7 @@ export interface Token {
 export interface Player {
   color: PlayerColor;
   name: string;
+  avatar?: AvatarId;
   type: PlayerType;
   peerId?: string; // WebRTC Peer ID if remote player
   isActive: boolean;
@@ -33,7 +42,13 @@ export interface GameLog {
   color?: PlayerColor;
 }
 
+export interface StatusBanner {
+  text: string;
+  type: 'info' | 'warning' | 'success';
+}
+
 export interface GameState {
+  screen: 'login' | 'setup' | 'playing' | 'finished';
   mode: GameMode;
   roomCode?: string;
   isHost?: boolean;
@@ -51,6 +66,7 @@ export interface GameState {
   selectedTokenId: number | null;
   validTokenMoves: number[]; // token IDs that can legally move with current diceValue
   soundEnabled: boolean;
+  statusBanner?: StatusBanner | null;
 }
 
 export type NetworkMessageType =
@@ -68,6 +84,7 @@ export interface NetworkMessage {
   type: NetworkMessageType;
   senderPeerId: string;
   senderName?: string;
+  senderAvatar?: AvatarId;
   roomCode?: string;
   color?: PlayerColor;
   diceValue?: number;

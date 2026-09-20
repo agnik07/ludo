@@ -1,20 +1,21 @@
 import React, { useState } from 'react';
 import { GameState } from '../types/ludo';
-import { Volume2, VolumeX, RotateCcw, Copy, Check, Scroll, Globe } from 'lucide-react';
+import { Volume2, VolumeX, RotateCcw, Copy, Check, Scroll, Globe, LogOut } from 'lucide-react';
 
 interface GameControlsProps {
   gameState: GameState;
   onToggleSound: () => void;
-  onRestartGame: () => void;
+  onExitGame: () => void;
 }
 
 export const GameControls: React.FC<GameControlsProps> = ({
   gameState,
   onToggleSound,
-  onRestartGame,
+  onExitGame,
 }) => {
   const [copied, setCopied] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   const copyRoomLink = () => {
     if (!gameState.roomCode) return;
@@ -27,11 +28,21 @@ export const GameControls: React.FC<GameControlsProps> = ({
   return (
     <div className="w-full flex flex-col gap-3">
       {/* Top Header Bar */}
-      <div className="flex items-center justify-between gap-2 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+      <div className="flex items-center justify-between gap-2 bg-slate-900/80 p-3 rounded-xl border border-slate-800 shadow-lg">
+        {/* Left Side: Exit Button & Room Code */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowExitConfirm(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-lg text-xs font-bold transition-all"
+            title="Exit to Lobby"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Exit Game</span>
+          </button>
+
           {gameState.mode === 'online' && gameState.roomCode && (
             <div className="flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-lg border border-slate-800">
-              <Globe className="w-4 h-4 text-emerald-400" />
+              <Globe className="w-3.5 h-3.5 text-emerald-400" />
               <span className="text-xs font-mono font-bold text-emerald-400 uppercase">
                 {gameState.roomCode}
               </span>
@@ -46,6 +57,7 @@ export const GameControls: React.FC<GameControlsProps> = ({
           )}
         </div>
 
+        {/* Right Side: Log Drawer & Sound */}
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowLogs(!showLogs)}
@@ -69,16 +81,37 @@ export const GameControls: React.FC<GameControlsProps> = ({
               <VolumeX className="w-4 h-4 text-slate-500" />
             )}
           </button>
-
-          <button
-            onClick={onRestartGame}
-            className="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-300 transition-colors"
-            title="New Game Setup"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
         </div>
       </div>
+
+      {/* Exit Confirmation Modal */}
+      {showExitConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-sm glass-panel p-6 space-y-4 border border-red-500/30 text-center">
+            <h3 className="text-xl font-bold text-white">Exit Current Game?</h3>
+            <p className="text-slate-300 text-xs">
+              Are you sure you want to leave this game? Your match progress will be lost.
+            </p>
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                onClick={() => setShowExitConfirm(false)}
+                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl border border-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowExitConfirm(false);
+                  onExitGame();
+                }}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold text-xs rounded-xl shadow-lg"
+              >
+                Yes, Exit Game
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Move History Drawer */}
       {showLogs && (
