@@ -163,7 +163,7 @@ export function App() {
     }
   };
 
-  // Host handling client network messages
+  // Host handling client network messages with queue retry for zero dropped rolls
   const handleNetworkMessageHost = (msg: NetworkMessage, senderPeerId: string) => {
     const current = gameStateRef.current;
     if (!current) return;
@@ -219,9 +219,17 @@ export function App() {
         color: assignedColor,
       });
     } else if (msg.type === 'ROLL_DICE') {
-      handleRollDice();
+      if (current.isAnimatingMove) {
+        setTimeout(() => handleNetworkMessageHost(msg, senderPeerId), 150);
+      } else {
+        handleRollDice();
+      }
     } else if (msg.type === 'MOVE_TOKEN' && msg.tokenId !== undefined && msg.color) {
-      handleSelectToken(msg.color, msg.tokenId);
+      if (current.isAnimatingMove) {
+        setTimeout(() => handleNetworkMessageHost(msg, senderPeerId), 150);
+      } else {
+        handleSelectToken(msg.color, msg.tokenId);
+      }
     } else if (msg.type === 'CHAT_MESSAGE' && msg.chatMessage) {
       handleReceiveChatMessage(msg.chatMessage);
     }
@@ -253,12 +261,13 @@ export function App() {
     setScreen('playing');
   };
 
-  // Roll Dice Action with Instant Broadcast
+  // Roll Dice Action with Instant Client Optimistic Feedback & Host Broadcast
   const handleRollDice = () => {
     if (!gameState || !gameState.canRoll || gameState.isRolling || gameState.isAnimatingMove) return;
 
-    // IF ONLINE CLIENT: Send ROLL_DICE to Host over P2P connection!
+    // IF ONLINE CLIENT: Show optimistic rolling UI immediately & send ROLL_DICE to Host
     if (gameState.mode === 'online' && !gameState.isHost) {
+      setGameState((prev) => (prev ? { ...prev, isRolling: true } : null));
       peerNetwork.broadcast({
         type: 'ROLL_DICE',
         senderPeerId: peerNetwork.peerId,
@@ -373,7 +382,7 @@ export function App() {
     }, 600);
   };
 
-  // Step-by-Step Animated Token Movement with Exact Step Calculations
+  // Step-by-Step Animated Token Movement with Instant State Transition
   const handleSelectToken = (color: PlayerColor, tokenId: number) => {
     if (!gameState || gameState.diceValue === null || gameState.isAnimatingMove) return;
 
@@ -392,7 +401,7 @@ export function App() {
     const token = player.tokens.find((t) => t.id === tokenId);
     if (!token) return;
 
-    // Calculate Authoritative Final Game State FIRST (Single Source of Truth)
+    // Calculate Authoritative Final Game State FIRST
     const { newState: finalState, capturedColor } = executeMoveToken(gameState, color, tokenId, diceValue);
     finalState.isAnimatingMove = false;
     finalState.statusBanner = null;
@@ -433,32 +442,30 @@ export function App() {
       if (stepCount >= totalSteps) {
         clearInterval(animateInterval);
 
-        // Apply authoritative finalState (no double movement)
-        setTimeout(() => {
-          if (capturedColor) {
-            audioSystem.playCapture();
-          } else if (initialStep + diceValue === 57) {
-            audioSystem.playHomeEntry();
-          } else if (initialStep + diceValue >= 52) {
-            audioSystem.playSafeSpot();
-          }
+        // Apply authoritative finalState IMMEDIATELY without delay
+        if (capturedColor) {
+          audioSystem.playCapture();
+        } else if (initialStep + diceValue === 57) {
+          audioSystem.playHomeEntry();
+        } else if (initialStep + diceValue >= 52) {
+          audioSystem.playSafeSpot();
+        }
 
-          if (finalState.gameStatus === 'finished') {
-            audioSystem.playVictory();
-          }
+        if (finalState.gameStatus === 'finished') {
+          audioSystem.playVictory();
+        }
 
-          if (finalState.mode === 'online' && finalState.isHost) {
-            peerNetwork.broadcast({
-              type: 'STATE_SYNC',
-              senderPeerId: peerNetwork.peerId,
-              gameState: finalState,
-            });
-          }
+        if (finalState.mode === 'online' && finalState.isHost) {
+          peerNetwork.broadcast({
+            type: 'STATE_SYNC',
+            senderPeerId: peerNetwork.peerId,
+            gameState: finalState,
+          });
+        }
 
-          setGameState(finalState);
-        }, 100);
+        setGameState(finalState);
       }
-    }, 130);
+    }, 120);
   };
 
   // Send In-Game Chat Message / Quick Emote
